@@ -1,66 +1,58 @@
 #!/bin/bash
 
-FILE="build.tc"
 OUTPUT="app"
 
-read_config() {
-  if [ ! -f "$FILE" ]; then
-    echo "build.tc not found"
-    exit 1
-  fi
+SUPPORTED_EXTS=("c" "cpp" "py" "java")
 
-  SRC=$(cat $FILE)
-}
+detect_files() {
+  FILES=$(find . -type f)
 
-expand_sources() {
-  EXPANDED=""
+  C_FILES=""
+  CPP_FILES=""
+  PY_FILES=""
+  JAVA_FILES=""
 
-  for item in $SRC; do
-    if [ -d "$item" ]; then
-      EXPANDED="$EXPANDED $(find "$item" -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.py" -o -name "*.java" \))"
-    else
-      echo "Error: '$item' is not a directory"
-      exit 1
-    fi
+  for f in $FILES; do
+    ext="${f##*.}"
+
+    case "$ext" in
+      c) C_FILES="$C_FILES $f" ;;
+      cpp) CPP_FILES="$CPP_FILES $f" ;;
+      py) PY_FILES="$PY_FILES $f" ;;
+      java) JAVA_FILES="$JAVA_FILES $f" ;;
+    esac
   done
-
-  SRC=$EXPANDED
 }
 
 detect_lang() {
-  FIRST=$(echo $SRC | awk '{print $1}')
-  EXT="${FIRST##*.}"
-
-  case "$EXT" in
-    c) LANG="c" ;;
-    cpp) LANG="cpp" ;;
-    py) LANG="python" ;;
-    java) LANG="java" ;;
-    *)
-      echo "Unsupported language: $EXT"
-      exit 1
-      ;;
-  esac
+  if [ -n "$CPP_FILES" ]; then
+    LANG="cpp"
+  elif [ -n "$C_FILES" ]; then
+    LANG="c"
+  elif [ -n "$PY_FILES" ]; then
+    LANG="python"
+  elif [ -n "$JAVA_FILES" ]; then
+    LANG="java"
+  else
+    echo "No supported source files found"
+    exit 1
+  fi
 }
 
 build() {
   case "$LANG" in
     c)
-      command -v gcc >/dev/null || { echo "gcc not installed"; exit 1; }
-      gcc $SRC -o $OUTPUT
+      gcc $C_FILES -o $OUTPUT
       ;;
     cpp)
-      command -v g++ >/dev/null || { echo "g++ not installed"; exit 1; }
-      g++ $SRC -o $OUTPUT
+      g++ $CPP_FILES -o $OUTPUT
       ;;
     python)
-      command -v python3 >/dev/null || { echo "python3 not installed"; exit 1; }
-      python3 $SRC
+      python3 $PY_FILES
       return
       ;;
     java)
-      command -v javac >/dev/null || { echo "javac not installed"; exit 1; }
-      javac $SRC
+      javac $JAVA_FILES
       ;;
   esac
 }
@@ -71,8 +63,8 @@ run() {
       ./$OUTPUT
       ;;
     java)
-      FIRST=$(echo $SRC | awk '{print $1}')
-      java ${FIRST%.java}
+      MAIN_CLASS=$(basename "$JAVA_FILES" .java)
+      java $MAIN_CLASS
       ;;
   esac
 }
@@ -82,37 +74,22 @@ clean() {
   echo "Cleaned"
 }
 
-init() {
-  if [ -f "$FILE" ]; then
-    echo "build.tc already exists"
-    exit 0
-  fi
-
-  echo "src" > $FILE
-  echo "Created build.tc with default folder 'src'"
-}
-
 case "$1" in
   run)
-    read_config
-    expand_sources
+    detect_files
     detect_lang
     build
     run
     ;;
   build)
-    read_config
-    expand_sources
+    detect_files
     detect_lang
     build
     ;;
   clean)
     clean
     ;;
-  init)
-    init
-    ;;
   *)
-    echo "Usage: toolchain [run|build|clean|init]"
+    echo "Usage: toolchain [run|build|clean]"
     ;;
 esac
